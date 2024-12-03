@@ -2,8 +2,7 @@ use itertools::Itertools;
 use std::fs;
 
 fn parse_report(line: &str) -> Vec<i32> {
-    line
-        .split_whitespace()
+    line.split_whitespace()
         .map(|num| num.parse().expect("Couldn't parse number"))
         .collect()
 }
@@ -28,13 +27,10 @@ fn is_safe_report_after_removal(report: &Vec<i32>) -> bool {
             .map(|(_, level)| *level)
             .collect::<Vec<i32>>();
 
-        // If the report is safe after removing the given level, then return true
         is_safe_report(&report_with_removal)
     })
 }
 
-/// Main function to read report data from a file, analyze the safety of reports,
-/// and print the count of safe reports both before and after potential level removal.
 fn main() {
     // Read the report data from the input file.
     let report_data = fs::read_to_string("input.txt").expect("Couldn't read input file.");
@@ -47,7 +43,7 @@ fn main() {
         .count();
 
     // Print the number of safe reports.
-    println!("Number of safe reports: {}", safe_reports_count);
+    println!("Part 1: {}", safe_reports_count);
 
     // Count the number of reports that are considered safe after removing one level.
     let safe_reports_after_removal_count = report_data
@@ -57,7 +53,7 @@ fn main() {
         .count();
 
     // Print the number of safe reports after possible level removal.
-    println!("Number of safe reports after removal: {}", safe_reports_after_removal_count);
+    println!("Part 2: {}", safe_reports_after_removal_count);
 }
 
 #[cfg(test)]
