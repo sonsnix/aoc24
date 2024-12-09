@@ -1,5 +1,6 @@
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 /// Directions: Left, Up, Right, Down
 const DIRECTIONS: [(i32, i32); 4] = [(-1, 0), (0, -1), (1, 0), (0, 1)];
@@ -15,8 +16,6 @@ struct State {
     map: HashMap<(i32, i32), char>,
     pos: (i32, i32),
     dir: usize,
-    width: usize,
-    height: usize,
 }
 
 /// Executes a single step in the simulation.
@@ -34,13 +33,6 @@ fn step(state: &State) -> StepResult {
 
 /// Reads the input map and initializes the simulation state.
 fn read_map(input: String) -> State {
-    let width = input
-        .lines()
-        .next()
-        .expect("Input should not be empty")
-        .len();
-    let height = input.lines().count();
-
     let mut map: HashMap<(i32, i32), char> = input
         .lines()
         .enumerate()
@@ -62,8 +54,6 @@ fn read_map(input: String) -> State {
     }
 
     State {
-        width,
-        height,
         dir: 1, // Initial direction (Up)
         map,
         pos,
@@ -71,7 +61,7 @@ fn read_map(input: String) -> State {
 }
 
 /// Solves part 1: Counts unique positions visited before exiting.
-fn part1(initial_state: &State) -> usize {
+fn part1(initial_state: &State) -> HashSet<(i32, i32)> {
     let mut state = initial_state.clone();
     let mut visited = HashSet::new();
 
@@ -85,17 +75,12 @@ fn part1(initial_state: &State) -> usize {
         }
     }
 
-    visited.len()
+    visited
 }
 
 /// Solves part 2: Counts grid cells where loops can form.
-fn part2(initial_state: State) -> i32 {
-    // Collect all grid positions into a Vec to ensure compatibility with Rayon
-    let positions: Vec<(usize, usize)> = (0..initial_state.height)
-        .flat_map(|y| (0..initial_state.width).map(move |x| (x, y)))
-        .collect();
-
-    positions
+fn part2(initial_state: State, visited_pos: &HashSet<(i32, i32)>) -> i32 {
+    visited_pos
         .par_iter() // Parallelize over the positions
         .filter_map(|&(x, y)| {
             let test_pos = (x as i32, y as i32);
@@ -128,17 +113,20 @@ fn part2(initial_state: State) -> i32 {
         .sum() // Sum up all the results
 }
 
-
 /// Entry point of the program.
 fn main() {
     let input = std::fs::read_to_string("input.txt").expect("Failed to read input file");
     let initial_state = read_map(input);
 
-    let num_visited = part1(&initial_state);
-    println!("Part 1: {}", num_visited);
+    let start = Instant::now();
+    let visited = part1(&initial_state);
+    let duration = start.elapsed();
+    println!("Part 1: {}, took {duration:?}", visited.len());
 
-    let loop_count = part2(initial_state);
-    println!("Part 2: {}", loop_count);
+    let start = Instant::now();
+    let loop_count = part2(initial_state, &visited);
+    let duration = start.elapsed();
+    println!("Part 1: {loop_count:?}, took {duration:?}");
 }
 
 #[cfg(test)]
@@ -158,13 +146,14 @@ mod tests {
 
         // Adjust this expected value based on your "test.txt" input
         let expected_result: usize = 41;
-        assert_eq!(result, expected_result, "Part 1 failed");
+        assert_eq!(result.len(), expected_result, "Part 1 failed");
     }
 
     #[test]
     fn test_part2() {
         let initial_state = read_test_input("test.txt");
-        let result = part2(initial_state);
+        let visited = part1(&initial_state);
+        let result = part2(initial_state, &visited);
 
         // Adjust this expected value based on your "test.txt" input
         let expected_result = 6;
