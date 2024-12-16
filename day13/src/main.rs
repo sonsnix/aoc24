@@ -19,17 +19,19 @@ fn parse_machines(input: &str) -> Result<Vec<ClawMachine>, Box<dyn Error>> {
         r"Button A: X\+(\d+), Y\+(\d+)\r?\nButton B: X\+(\d+), Y\+(\d+)\r?\nPrize: X=(\d+), Y=(\d+)",
     )?;
 
-    let machines = machine_regex
+    let machines: Vec<ClawMachine> = machine_regex
         .captures_iter(input)
-        .map(|cap| ClawMachine {
-            a_1: cap[1].parse()?,
-            a_2: cap[2].parse()?,
-            b_1: cap[3].parse()?,
-            b_2: cap[4].parse()?,
-            c_1: cap[5].parse()?,
-            c_2: cap[6].parse()?,
+        .map(|cap| {
+            Ok(ClawMachine {
+                a_1: cap[1].parse()?,
+                a_2: cap[2].parse()?,
+                b_1: cap[3].parse()?,
+                b_2: cap[4].parse()?,
+                c_1: cap[5].parse()?,
+                c_2: cap[6].parse()?,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
 
     Ok(machines)
 }
@@ -57,8 +59,10 @@ fn solve_claw_machines(machines: &[ClawMachine], offset: i128) -> i128 {
         .filter_map(|machine| solve_equation(machine, offset))
         .filter(|&(x, y, _)| x >= 0 && y >= 0 && (offset != 0 || (x <= 100 && y <= 100)))
         .filter(|&(x, y, _)| {
-            x * machine.a_1 + y * machine.b_1 == machine.c_1 + offset &&
-            x * machine.a_2 + y * machine.b_2 == machine.c_2 + offset
+            machines.iter().any(|m| {
+                x * m.a_1 + y * m.b_1 == m.c_1 + offset &&
+                x * m.a_2 + y * m.b_2 == m.c_2 + offset
+            })
         })
         .map(|(_, _, tokens)| tokens)
         .sum()
