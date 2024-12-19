@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use itertools::Itertools;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 const DIRS: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 
@@ -76,14 +77,17 @@ impl Grid {
         min_steps
     }
 
-    fn find_byte_that_blocks(&self, start_bytes: Option<usize>) -> Option<(i32, i32)> {
-        for num_bytes in start_bytes.unwrap_or(1)..self.bytes.len() + 1 {
-            println!("num_bytes: {}", num_bytes);
-            if self.find_shortest_path_after_bytes(num_bytes) == i32::MAX {
-                return Some(self.bytes[num_bytes - 1]);
-            }
+    fn find_first_blocking_byte(&self, start: Option<usize>) -> Option<(i32, i32)> {
+        let range = start.unwrap_or(1)..=self.bytes.len();
+
+        let blocking_byte = range
+            .into_par_iter()
+            .find_first(|&num_bytes| self.find_shortest_path_after_bytes(num_bytes) == i32::MAX);
+
+        match blocking_byte {
+            Some(num_bytes) => Some(self.bytes[num_bytes - 1]),
+            None => None,
         }
-        None
     }
 }
 
@@ -93,7 +97,10 @@ fn main() {
     let grid = Grid::from(&input, PROD_SIZE.0, PROD_SIZE.1);
 
     println!("Part 1: {}", grid.find_shortest_path_after_bytes(PROD_TIME));
-    println!("Part 2: {:?}", grid.find_byte_that_blocks(Some(PROD_TIME)).unwrap());
+    println!(
+        "Part 2: {:?}",
+        grid.find_first_blocking_byte(Some(PROD_TIME)).unwrap()
+    );
 }
 
 #[cfg(test)]
@@ -121,6 +128,6 @@ mod tests {
 
         let grid = Grid::from(&input, TEST_SIZE.0, TEST_SIZE.1);
 
-        assert_eq!(grid.find_byte_that_blocks(Some(TEST_TIME)), Some((6, 1)));
+        assert_eq!(grid.find_first_blocking_byte(Some(TEST_TIME)), Some((6, 1)));
     }
 }
