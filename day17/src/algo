@@ -1,0 +1,24 @@
+Register A: 51064159
+Register B: 0
+Register C: 0
+
+Program:
+2,4,
+1,5,
+7,5,
+1,6,
+0,3,
+4,6,
+5,5,
+3,0
+
+while A != 0 {
+B = A % 8 (take last 3 bits from A)
+B = B ^ 5
+C = A / (2^B)
+B = B ^ 6
+A = A / (2^3) (drop last 3 bits from A)
+B = B ^ C
+output (B % 8)
+}
+
