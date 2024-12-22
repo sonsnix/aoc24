@@ -96,11 +96,11 @@ fn main() {
 
     let grid = Grid::from(&input, PROD_SIZE.0, PROD_SIZE.1);
 
-    println!("Part 1: {}", grid.find_shortest_path_after_bytes(PROD_TIME));
-    println!(
-        "Part 2: {:?}",
-        grid.find_first_blocking_byte(Some(PROD_TIME)).unwrap()
-    );
+    let part_1 = grid.find_shortest_path_after_bytes(PROD_TIME);
+    println!("Part 1: {}", part_1);
+
+    let part_2 = grid.find_first_blocking_byte(Some(PROD_TIME)).unwrap();
+    println!("Part 2: {},{}", part_2.0, part_2.1);
 }
 
 #[cfg(test)]
