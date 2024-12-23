@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
