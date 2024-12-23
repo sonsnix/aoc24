@@ -1,0 +1,9 @@
+S
+(S << 6) ^ S
+keep rightmost 24 bits
+(S >> 5) ^ S
+keep rightmost 24 bits
+(S << 11) ^ S
+keep rightmost 24 bits
+
+
