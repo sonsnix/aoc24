@@ -1,93 +1,129 @@
 use std::collections::{HashMap, HashSet};
+
 use itertools::Itertools;
 
 fn main() {
-    let input = std::fs::read_to_string("input.txt").unwrap();
-    let graph = build_graph(&input);
-    
-    let sets_of_three = find_sets_of_three(&graph);
-    println!("Part 1: {}", sets_of_three.len());
-    
-    let parties = find_parties(&graph);
-    let password = get_largest_party_password(&parties);
-    println!("Part 2: {}", password);
-}
+    let input = std::fs::read_to_string("input.txt")
+        .unwrap()
+        .replace("\r\n", "\n");
 
-fn build_graph(input: &str) -> HashMap<String, HashSet<String>> {
-    let mut graph = HashMap::new();
-    
-    for line in input.lines() {
-        let (computer_a, computer_b) = line.split('-')
-            .map(String::from)
-            .collect_tuple()
-            .unwrap();
-        
-        // Add bidirectional connections
-        graph.entry(computer_a.clone())
-            .or_insert_with(HashSet::new)
-            .insert(computer_b.clone());
-            
-        graph.entry(computer_b)
-            .or_insert_with(HashSet::new)
-            .insert(computer_a);
+    let mut split = input.split("\n\n");
+    let initial_values = split.next().unwrap();
+    let logics = split.next().unwrap();
+
+    let mut wires: HashMap<String, i64> = HashMap::new();
+    let mut logic = vec![];
+
+    for line in initial_values.lines() {
+        let (wire, value) = line.split_once(": ").unwrap();
+        wires.insert(wire.to_string(), value.parse().unwrap());
     }
-    
-    graph
-}
 
-fn find_sets_of_three(graph: &HashMap<String, HashSet<String>>) -> HashSet<Vec<String>> {
-    let mut sets_of_three = HashSet::new();
-    
-    for (computer_a, connections) in graph {
-        let valid_combinations = connections
-            .iter()
-            .combinations(2)
-            .filter(|pair| {
-                graph[pair[0]].contains(pair[1]) &&
-                (computer_a.starts_with('t') || 
-                 pair[0].starts_with('t') || 
-                 pair[1].starts_with('t'))
-            })
-            .map(|pair| {
-                [computer_a.clone(), pair[0].clone(), pair[1].clone()]
-                    .into_iter()
-                    .sorted()
-                    .collect_vec()
-            });
-            
-        sets_of_three.extend(valid_combinations);
+    for line in logics.lines() {
+        let (lhs, rhs) = line.split_once(" -> ").unwrap();
+
+        let mut split = lhs.split(' ');
+        let wire_a = split.next().unwrap();
+        let operation = split.next().unwrap();
+        let wire_b = split.next().unwrap();
+
+        let wire_c = rhs;
+
+        logic.push((
+            wire_a.to_string(),
+            wire_b.to_string(),
+            operation.to_string(),
+            wire_c.to_string(),
+        ));
     }
-    
-    sets_of_three
+
+    let initial_wires = wires.clone();
+    let initial_logic = logic.clone();
+
+    propagate_wires(&mut wires, &logic);
+
+    let z: i64 = calculate_value(&wires, "z");
+
+    println!("Part 1: {}", z);
+
+    let x = calculate_value(&wires, "x");
+    let y = calculate_value(&wires, "y");
+
+    let z_correct = x + y;
+    let incorrect_outputs: Vec<_> = format!("{:b}", z ^ z_correct)
+        .chars()
+        .rev()
+        .enumerate()
+        .filter(|(_, c)| *c == '1')
+        .map(|(i, _)| format!("z{:02}", i))
+        .collect();
+
+    let mut swap_wires = HashSet::new();
+    let mut queue = Vec::from(incorrect_outputs);
+
+    while let Some(wire) = queue.pop() {
+        if wire.starts_with("x") || wire.starts_with("y") || !swap_wires.insert(wire.clone()) {
+            continue;
+        }
+
+        for (wire_a, wire_b, _, wire_c) in logic.iter() {
+            if wire_c != &wire {
+                continue;
+            }
+
+            queue.push(wire_a.to_string());
+            queue.push(wire_b.to_string());
+        }
+    }
+
+    let pairs = swap_wires.iter().combinations(2);
+
+    let mut count = 0;
+    for combination in pairs.combinations(4) {
+        count += 1;
+    }
+    println!("Part 2: {}", count);
 }
 
-fn find_parties(graph: &HashMap<String, HashSet<String>>) -> Vec<HashSet<String>> {
-    let mut parties: Vec<HashSet<String>> = Vec::new();
-    
-    for (computer_a, connections) in graph {
-        // Try to add computer to existing parties
-        for party in &mut parties {
-            if party
-                .iter()
-                .all(|computer_b| connections.contains(computer_b))
+fn propagate_wires(
+    wires: &mut HashMap<String, i64>,
+    logic: &Vec<(String, String, String, String)>,
+) {
+    let mut change = true;
+
+    while change {
+        change = false;
+
+        for (wire_a, wire_b, operation, wire_c) in logic.iter() {
+            if !wires.contains_key(wire_c)
+                && wires.contains_key(wire_a)
+                && wires.contains_key(wire_b)
             {
-                party.insert(computer_a.clone());
+                let a = wires[wire_a];
+                let b = wires[wire_b];
+
+                wires.insert(
+                    wire_c.clone(),
+                    match operation.as_str() {
+                        "AND" => a & b,
+                        "OR" => a | b,
+                        "XOR" => a ^ b,
+                        _ => panic!("Unknown operation: {operation}"),
+                    },
+                );
+
+                change = true;
             }
         }
-        
-        // Create new party with just this computer
-        parties.push(HashSet::from([computer_a.clone()]));
     }
-    
-    parties
 }
 
-fn get_largest_party_password(parties: &[HashSet<String>]) -> String {
-    parties
+fn calculate_value(wires: &HashMap<String, i64>, starts_with: &str) -> i64 {
+    wires
         .iter()
-        .max_by_key(|party| party.len())
-        .unwrap()
-        .iter()
+        .filter(|(k, _)| k.starts_with(starts_with))
         .sorted()
-        .join(",")
+        .enumerate()
+        .map(|(i, (_, v))| v * 2_i64.pow(i as u32))
+        .sum()
 }
