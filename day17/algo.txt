@@ -14,11 +14,11 @@ Program:
 
 while A != 0 {
 B = A % 8 (take last 3 bits from A)
-B = B ^ 5
-C = A / (2^B)
-B = B ^ 6
+B = B ^ 5 (manipulate last 3 bits of B)
+C = A / (2^B) (drop last B - up to 7 - bits from A and save in C)
+B = B ^ 6 (manipulate last 3 bits of B)
 A = A / (2^3) (drop last 3 bits from A)
-B = B ^ C
+B = B ^ C 
 output (B % 8)
 }
 
