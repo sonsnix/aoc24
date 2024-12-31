@@ -19,17 +19,21 @@ impl Warehouse {
         let mut robot = Position { x: 0, y: 0 };
 
         let lines: Vec<&str> = map.lines().collect();
-
+        
         for (y, line) in lines.iter().enumerate() {
             for (x, ch) in line.chars().enumerate() {
                 let pos = Position {
-                    x: x as i32,
+                    x: x as i32 * 2,
                     y: y as i32,
                 };
 
                 match ch {
                     '#' => {
                         walls.insert(pos);
+                        walls.insert(Position {
+                            x: pos.x + 1,
+                            y: pos.y,
+                        });
                     }
                     'O' => {
                         boxes.insert(pos);
@@ -49,10 +53,6 @@ impl Warehouse {
         }
     }
 
-    fn is_valid_move(&self, pos: Position) -> bool {
-        !self.walls.contains(&pos)
-    }
-
     fn move_robot(&mut self, direction: char) -> bool {
         let delta = match direction {
             '^' => Position { x: 0, y: -1 },
@@ -67,45 +67,70 @@ impl Warehouse {
             y: self.robot.y + delta.y,
         };
 
-        // Check if new robot position is blocked by a wall
-        if !self.is_valid_move(new_robot_pos) {
-            return false;
-        }
-
         // Check if there are boxes to be pushed and track their positions
         let mut boxes_to_push = Vec::new();
-        let mut current_pos = new_robot_pos;
 
         // Collect consecutive boxes
-        while self.boxes.contains(&current_pos) {
-            boxes_to_push.push(current_pos);
-            current_pos = Position {
-                x: current_pos.x + delta.x,
-                y: current_pos.y + delta.y,
-            };
-        }
-
-        // Check if pushing is possible
-        if !boxes_to_push.is_empty() {
-            // Check if the final position after pushing is free
-            if !self.walls.contains(&current_pos) && !self.boxes.contains(&current_pos) {
-                // Remove boxes from their original positions
-                for &box_pos in &boxes_to_push {
-                    self.boxes.remove(&box_pos);
-                }
-
-                // Add boxes to their new positions
-                for &box_pos in &boxes_to_push {
-                    let new_box_pos = Position {
-                        x: box_pos.x + delta.x,
-                        y: box_pos.y + delta.y,
-                    };
-                    self.boxes.insert(new_box_pos);
-                }
-            } else {
-                // Cannot push boxes
+        let mut queue = vec![new_robot_pos];
+        while let Some(pos) = queue.pop() {
+            if self.walls.contains(&pos) {
                 return false;
             }
+
+            let neighbor = Position {
+                x: pos.x - 1,
+                y: pos.y,
+            };
+
+            if direction == '<' && self.boxes.contains(&neighbor) {
+                boxes_to_push.push(neighbor);
+                queue.push(Position {
+                    x: neighbor.x - 1,
+                    y: neighbor.y,
+                });
+            } else if direction == '>' && self.boxes.contains(&pos) {
+                boxes_to_push.push(pos);
+                queue.push(Position {
+                    x: pos.x + 2,
+                    y: pos.y,
+                });
+            } else if direction == '^' || direction == 'v' {
+                if self.boxes.contains(&pos) {
+                    boxes_to_push.push(pos);
+                    queue.push(Position {
+                        x: pos.x + delta.x,
+                        y: pos.y + delta.y,
+                    });
+                    queue.push(Position {
+                        x: pos.x + delta.x + 1,
+                        y: pos.y + delta.y,
+                    });
+                } else if self.boxes.contains(&neighbor) {
+                    boxes_to_push.push(neighbor);
+                    queue.push(Position {
+                        x: pos.x + delta.x,
+                        y: pos.y + delta.y,
+                    });
+                    queue.push(Position {
+                        x: neighbor.x + delta.x,
+                        y: neighbor.y + delta.y,
+                    });
+                }
+            }
+        }
+
+        // Remove boxes from their original positions
+        for &box_pos in &boxes_to_push {
+            self.boxes.remove(&box_pos);
+        }
+
+        // Add boxes to their new positions
+        for &box_pos in &boxes_to_push {
+            let new_box_pos = Position {
+                x: box_pos.x + delta.x,
+                y: box_pos.y + delta.y,
+            };
+            self.boxes.insert(new_box_pos);
         }
 
         // Move robot

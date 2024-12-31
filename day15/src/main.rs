@@ -1,6 +1,7 @@
 use std::fs;
 
 mod part1;
+mod part2;
 
 fn main() {
     // Read entire input file
@@ -8,4 +9,7 @@ fn main() {
 
     let result = part1::solve_warehouse_puzzle(&input);
     println!("Part 1: {}", result);
+
+    let result = part2::solve_warehouse_puzzle(&input);
+    println!("Part 2: {}", result);
 }
