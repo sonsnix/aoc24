@@ -1,258 +1,152 @@
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    fmt, usize,
-};
+use cached::proc_macro::cached;
+use std::collections::HashSet;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct Position {
     x: i32,
     y: i32,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-enum Action {
-    Up,
-    Down,
-    Left,
-    Right,
-    Press,
+// Keypad layouts
+const STANDARD_KEYPAD: &[(Position, char)] = &[  
+    (Position { x: 0, y: 2 }, '7'),
+    (Position { x: 1, y: 2 }, '8'),
+    (Position { x: 2, y: 2 }, '9'),
+    (Position { x: 0, y: 1 }, '4'),
+    (Position { x: 1, y: 1 }, '5'),
+    (Position { x: 2, y: 1 }, '6'),
+    (Position { x: 0, y: 0 }, '1'),
+    (Position { x: 1, y: 0 }, '2'),
+    (Position { x: 2, y: 0 }, '3'),
+    (Position { x: 1, y: -1 }, '0'),
+    (Position { x: 2, y: -1 }, 'A'),
+];
+
+const DIRECTIONAL_KEYPAD: &[(Position, char)] = &[  
+    (Position { x: 1, y: 1 }, '^'),
+    (Position { x: 2, y: 1 }, 'A'),
+    (Position { x: 0, y: 0 }, '<'),
+    (Position { x: 1, y: 0 }, 'v'),
+    (Position { x: 2, y: 0 }, '>'),
+];
+
+#[cached]
+fn get_position(directional: bool, target: char) -> Position {
+    let layout = if directional {
+        DIRECTIONAL_KEYPAD
+    } else {
+        STANDARD_KEYPAD
+    };
+
+    layout
+        .iter()
+        .find(|(_, button)| *button == target)
+        .map(|(pos, _)| *pos)
+        .expect("Target not found in keypad layout")
 }
 
-impl fmt::Debug for Action {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_char())
-    }
+#[cached]
+fn pos_after_move(directional: bool, current: Position, action: char) -> Option<Position> {
+    let new_pos = match action {
+        '^' => Position { x: current.x, y: current.y + 1 },
+        'v' => Position { x: current.x, y: current.y - 1 },
+        '<' => Position { x: current.x - 1, y: current.y },
+        '>' => Position { x: current.x + 1, y: current.y },
+        _ => panic!("Unknown action: {}", action),
+    };
+
+    let layout = if directional {
+        DIRECTIONAL_KEYPAD
+    } else {
+        STANDARD_KEYPAD
+    };
+
+    layout.iter().any(|(pos, _)| *pos == new_pos).then_some(new_pos)
 }
 
-impl Action {
-    fn from(c: char) -> Self {
-        match c {
-            '^' => Action::Up,
-            'v' => Action::Down,
-            '<' => Action::Left,
-            '>' => Action::Right,
-            'A' => Action::Press,
-            _ => panic!("Unknown action: {}", c),
-        }
-    }
+#[cached]
+fn paths_from_to(directional: bool, from: char, to: char) -> Vec<String> {
+    let start = get_position(directional, from);
+    let end = get_position(directional, to);
 
-    fn to_char(&self) -> char {
-        match self {
-            Action::Up => '^',
-            Action::Down => 'v',
-            Action::Left => '<',
-            Action::Right => '>',
-            Action::Press => 'A',
-        }
-    }
-}
+    let horizontal_moves = match end.x - start.x {
+        delta if delta > 0 => vec!['>'; delta as usize],
+        delta if delta < 0 => vec!['<'; -delta as usize],
+        _ => vec![],
+    };
 
-enum KeypadType {
-    Standard,    // The door keypad
-    Directional, // The robot control pad
-}
+    let vertical_moves = match end.y - start.y {
+        delta if delta > 0 => vec!['^'; delta as usize],
+        delta if delta < 0 => vec!['v'; -delta as usize],
+        _ => vec![],
+    };
 
-#[derive(Debug)]
-struct Keypad {
-    buttons: HashMap<Position, char>,
-}
+    let paths = HashSet::from([
+        [horizontal_moves.clone(), vertical_moves.clone()].concat(),
+        [vertical_moves, horizontal_moves].concat(),
+    ]);
 
-impl Keypad {
-    fn new(keypad_type: KeypadType) -> Self {
-        let buttons = match keypad_type {
-            KeypadType::Standard => {
-                let mut map = HashMap::new();
-                // First row
-                map.insert(Position { x: 0, y: 2 }, '7');
-                map.insert(Position { x: 1, y: 2 }, '8');
-                map.insert(Position { x: 2, y: 2 }, '9');
-                // Second row
-                map.insert(Position { x: 0, y: 1 }, '4');
-                map.insert(Position { x: 1, y: 1 }, '5');
-                map.insert(Position { x: 2, y: 1 }, '6');
-                // Third row
-                map.insert(Position { x: 0, y: 0 }, '1');
-                map.insert(Position { x: 1, y: 0 }, '2');
-                map.insert(Position { x: 2, y: 0 }, '3');
-                // Fourth row
-                map.insert(Position { x: 1, y: -1 }, '0');
-                map.insert(Position { x: 2, y: -1 }, 'A');
-                map
-            }
-            KeypadType::Directional => {
-                let mut map = HashMap::new();
-                // First row
-                map.insert(Position { x: 1, y: 1 }, '^');
-                map.insert(Position { x: 2, y: 1 }, 'A');
-                // Second row
-                map.insert(Position { x: 0, y: 0 }, '<');
-                map.insert(Position { x: 1, y: 0 }, 'v');
-                map.insert(Position { x: 2, y: 0 }, '>');
-                map
-            }
-        };
-
-        Self { buttons }
-    }
-
-    fn pos_after_move(&self, pos: Position, direction: Action) -> Option<Position> {
-        let new_pos = match direction {
-            Action::Up => Position {
-                x: pos.x,
-                y: pos.y + 1,
-            },
-            Action::Down => Position {
-                x: pos.x,
-                y: pos.y - 1,
-            },
-            Action::Left => Position {
-                x: pos.x - 1,
-                y: pos.y,
-            },
-            Action::Right => Position {
-                x: pos.x + 1,
-                y: pos.y,
-            },
-            Action::Press => pos,
-        };
-
-        // Only move if the new position exists on the keypad
-        self.buttons.contains_key(&new_pos).then_some(new_pos)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct State {
-    robot_keypads: Vec<Position>,
-    door_keypad: Position,
-    remaining_code: Vec<char>,
-}
-
-impl State {
-    fn new(code: Vec<char>) -> Self {
-        Self {
-            robot_keypads: vec![Position { x: 2, y: 1 }; 2],
-            door_keypad: Position { x: 2, y: -1 },
-            remaining_code: code.into_iter().rev().collect(),
-        }
-    }
-
-    fn step(&self, action: Action, keypad: &Keypad, dirpad: &Keypad) -> Option<State> {
-        let mut new_state = self.clone();
-
-        new_state.robot_keypads[0] = dirpad.pos_after_move(self.robot_keypads[0], action)?;
-
-        if action == Action::Press {
-            let sub_action = Action::from(*dirpad.buttons.get(&self.robot_keypads[0])?);
-
-            new_state.robot_keypads[1] =
-                dirpad.pos_after_move(self.robot_keypads[1], sub_action)?;
-
-            if sub_action == Action::Press {
-                let sub_sub_action = Action::from(*dirpad.buttons.get(&self.robot_keypads[1])?);
-                new_state.door_keypad = keypad.pos_after_move(self.door_keypad, sub_sub_action)?;
-
-                if sub_sub_action == Action::Press {
-                    if let Some(&c) = keypad.buttons.get(&new_state.door_keypad) {
-                        if let Some(c_expected) = new_state.remaining_code.pop() {
-                            if c != c_expected {
-                                return None;
-                            }
-                        }
-                    }
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let mut position = start;
+            if path.iter().all(|&action| {
+                if let Some(new_pos) = pos_after_move(directional, position, action) {
+                    position = new_pos;
+                    true
+                } else {
+                    false
                 }
+            }) {
+                Some(path.into_iter().chain(std::iter::once('A')).collect::<String>())
+            } else {
+                None
             }
-        }
+        })
+        .collect()
+}
 
-        Some(new_state)
+#[cached]
+fn solve_code(sequence: String, directional: bool, level: usize) -> usize {
+    let from_to_pairs = std::iter::once('A').chain(sequence.chars()).zip(sequence.chars());
+
+    let paths: Vec<Vec<String>> = from_to_pairs
+        .map(|(from, to)| paths_from_to(directional, from, to))
+        .collect();
+
+    if level == 0 {
+        paths
+            .into_iter()
+            .map(|sub_paths| sub_paths.into_iter().map(|path| path.len()).min().unwrap())
+            .sum()
+    } else {
+        paths
+            .into_iter()
+            .map(|sub_paths| {
+                sub_paths
+                    .into_iter()
+                    .map(|path| solve_code(path, true, level - 1))
+                    .min()
+                    .unwrap()
+            })
+            .sum()
     }
 }
 
-const MOVES: [Action; 5] = [Action::Up, Action::Down, Action::Left, Action::Right, Action::Press];
+fn calculate_complexity(input: &str, max_level: usize) -> usize {
+    input
+        .lines()
+        .map(|code| {
+            let weight: usize = code[..code.len() - 1].parse().unwrap();
+            let shortest_path = solve_code(code.chars().collect(), false, max_level);
+            shortest_path * weight
+        })
+        .sum()
+}
 
 fn main() {
-    let input = std::fs::read_to_string("input.txt").unwrap();
-    let keypad = Keypad::new(KeypadType::Standard);
-    let dirpad = Keypad::new(KeypadType::Directional);
+    let input = std::fs::read_to_string("input.txt").expect("Failed to read input file");
 
-    let mut total_complexity = 0;
-
-    for code in input.lines() {
-        println!("Looking at code: {}", code);
-
-        let state = State::new(code.chars().collect());
-
-        let mut queue = VecDeque::from([(state, vec![])]);
-
-        let mut shortest_path = usize::MAX;
-        let mut visited = HashMap::new();
-
-        while let Some((state, path)) = queue.pop_front() {
-            if let Some(&steps)= visited.get(&state.clone()) {
-                if steps < path.len() {
-                    continue;
-                }
-            }
-            visited.insert(state.clone(), path.len());
-
-            if state.remaining_code.is_empty() {
-                if path.len() < shortest_path {
-                    shortest_path = path.len();
-                }
-                continue;
-            }
-            if path.len() > shortest_path {
-                continue;
-            }
-
-            for action in MOVES {
-                if let Some(new_state) = state.step(action, &keypad, &dirpad) {
-                    let mut new_path = path.clone();
-                    new_path.push(action);
-                    queue.push_back((new_state, new_path));
-                }
-            }
-        }
-
-        let complexity = shortest_path * code[..code.len() - 1].parse::<usize>().unwrap();
-
-        println!("complexity: {}", complexity);
-
-        total_complexity += complexity;
-    }
-    println!("Part 1: {}", total_complexity);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_step() {
-        let test_tuples = vec![(
-            "029A",
-            "<vA<AA>>^AvAA<^A>A<v<A>>^AvA^A<vA>^A<v<A>^A>AAvA^A<v<A>A>^AAAvA<^A>A",
-        ),
-        (
-            "980A",
-            "<v<A>>^AAAvA^A<vA<AA>>^AvAA<^A>A<v<A>A>^AAAvA<^A>A<vA>^A<A>A",
-        ),(
-            "179A",
-            "<v<A>>^A<vA<A>>^AAvAA<^A>A<v<A>>^AAvA^A<vA>^AA<A>A<v<A>A>^AAAvA<^A>A",
-        )];
-
-        let keypad = Keypad::new(KeypadType::Standard);
-        let dirpad = Keypad::new(KeypadType::Directional);
-
-        for (code, actions) in test_tuples {
-            let mut state = State::new(code.chars().collect());
-
-            for action in actions.chars().map(|c| Action::from(c)) {
-                if let Some(new_state) = state.step(action, &keypad, &dirpad) {
-                    state = new_state;
-                }
-            }
-            assert_eq!(state.remaining_code.len(), 0);
-        }
-    }
+    println!("Part 1: {}", calculate_complexity(&input, 2));
+    println!("Part 2: {}", calculate_complexity(&input, 25));
 }
